@@ -1,0 +1,450 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Window = Rayfield:CreateWindow({
+   Name = "Auto Farm & Far Radar (Pro)",
+   LoadingTitle = "กำลังโหลดระบบ...",
+   ConfigurationSaving = { Enabled = false },
+   KeySystem = false
+})
+
+_G.AutoFarm = false
+_G.AntiMonster = false
+_G.Fullbright = false
+_G.Noclip = false
+_G.RGB_ESP = false
+_G.RadarUI = false
+_G.SuperSprint = false
+_G.InfJump = false
+
+local selectedItem = "COPPER"
+local deleteName = ""
+local ItemTiers = {
+   ["COPPER"] = 1,
+   ["SILVER"] = 2,
+   ["GOLD"] = 3,
+   ["EMERALD"] = 6,
+   ["RUBY"] = 8,
+   ["DIAMOND"] = 10,
+   ["CRYSTAL"] = 20
+}
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = workspace
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- 📡 เรดาร์มุมขวาบน
+local RadarGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+RadarGui.ResetOnSpawn = false
+RadarGui.Enabled = false
+
+local RadarFrame = Instance.new("Frame", RadarGui)
+RadarFrame.Size = UDim2.new(0, 210, 0, 80)
+RadarFrame.Position = UDim2.new(1, -220, 0, 10)
+RadarFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+RadarFrame.BackgroundTransparency = 0.2
+RadarFrame.BorderSizePixel = 0
+Instance.new("UICorner", RadarFrame).CornerRadius = UDim.new(0, 6)
+
+local RadarInfo = Instance.new("TextLabel", RadarFrame)
+RadarInfo.Size = UDim2.new(1, 0, 1, 0)
+RadarInfo.BackgroundTransparency = 1
+RadarInfo.TextColor3 = Color3.fromRGB(0, 255, 150)
+RadarInfo.TextSize = 12
+RadarInfo.Font = Enum.Font.SourceSansBold
+RadarInfo.Text = "📡 กำลังเชื่อมต่อเรดาร์..."
+
+-- Noclip Loop
+RunService.Stepped:Connect(function()
+   if _G.Noclip and LocalPlayer.Character then
+      for _, v in ipairs(LocalPlayer.Character:GetDescendants()) do
+         if v:IsA("BasePart") then
+            v.CanCollide = false
+         end
+      end
+   end
+end)
+
+-- Super Sprint Loop
+RunService.Heartbeat:Connect(function()
+   if _G.SuperSprint and LocalPlayer.Character then
+      local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+      if humanoid and humanoid.WalkSpeed < 70 then
+         humanoid.WalkSpeed = 70
+      end
+   end
+end)
+
+-- Infinite Jump System
+UserInputService.JumpRequest:Connect(function()
+   if _G.InfJump and LocalPlayer.Character then
+      local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+      if humanoid then
+         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+      end
+   end
+end)
+
+-- ฟังก์ชันค้นหาจุดขายสินค้า
+local function getSellPart()
+   for _, name in ipairs({"Sell", "Recycle", "Shop", "Deposit"}) do
+      local part = Workspace:FindFirstChild(name, true)
+      if part then
+         return part:IsA("BasePart") and part or part.PrimaryPart or part:FindFirstChildWhichIsA("BasePart")
+      end
+   end
+   return nil
+end
+
+-- 🔍 ค้นหาไอเทมเป้าหมายที่อยู่ไกลที่สุด
+local function getFarthestTarget()
+   local target, farthest = nil, -math.huge
+   local character = LocalPlayer.Character
+   if not (character and character:FindFirstChild("HumanoidRootPart")) then return nil end
+   local myPos = character.HumanoidRootPart.Position
+
+   for _, obj in ipairs(Workspace:GetDescendants()) do
+      if obj.Name:upper():find(selectedItem) then
+         local part = obj:IsA("BasePart") and obj or (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")))
+         if part then
+            local dist = (myPos - part.Position).Magnitude
+            if dist > farthest then
+               farthest = dist
+               target = part
+            end
+         end
+      end
+   end
+   return target
+end
+
+-- อัปเดตข้อมูลเรดาร์ Real-time
+RunService.RenderStepped:Connect(function()
+   if _G.RadarUI and RadarGui.Enabled then
+      local target = getFarthestTarget()
+      local character = LocalPlayer.Character
+      if target and character and character:FindFirstChild("HumanoidRootPart") then
+         local distance = math.floor((character.HumanoidRootPart.Position - target.Position).Magnitude)
+         local tier = ItemTiers[selectedItem] or 1
+         RadarInfo.Text = "🎯 เป้าหมาย: " .. selectedItem .. " (Tier: " .. tier .. ")\n📍 โซน: " .. tostring(target.Parent.Name) .. "\n📏 ระยะ: " .. distance .. " ม."
+      else
+         RadarInfo.Text = "❌ ไม่พบ " .. selectedItem
+      end
+   end
+end)
+
+-- RGB ESP Loop
+task.spawn(function()
+   local hue = 0
+   while true do
+      task.wait(0.1)
+      hue = (hue + 0.03) % 1
+      if _G.RGB_ESP then
+         for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "RGB_Highlight" and obj:IsA("Highlight") then
+               obj.FillColor = Color3.fromHSV(hue, 1, 1)
+               obj.OutlineColor = Color3.fromHSV(hue, 1, 1)
+            end
+         end
+      end
+   end
+end)
+
+-- ฟังก์ชันขายไอเทม
+local function sellItems()
+   pcall(function()
+      local character = LocalPlayer.Character
+      if not (character and character:FindFirstChild("HumanoidRootPart")) then return end
+      local sellPart = getSellPart()
+      if sellPart then
+         character.HumanoidRootPart.CFrame = sellPart.CFrame + Vector3.new(0, 3, 0)
+         task.wait(0.1)
+      end
+      for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+         if remote.Name:lower():find("sell") or remote.Name:lower():find("recycle") then
+            if remote:IsA("RemoteEvent") then
+               remote:FireServer()
+            elseif remote:IsA("RemoteFunction") then
+               remote:InvokeServer()
+            end
+         end
+      end
+   end)
+end
+
+-- TAB 1: เคลื่อนที่ & ป้องกัน
+local Tab1 = Window:CreateTab("เคลื่อนที่ & ป้องกัน", 4483362458)
+
+Tab1:CreateToggle({
+   Name = "🏃‍♂️ วิ่งเร็วพิเศษ (Super Sprint)",
+   CurrentValue = false,
+   Callback = function(v)
+      _G.SuperSprint = v
+      if not v and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+         LocalPlayer.Character.Humanoid.WalkSpeed = 16
+      end
+   end
+})
+
+Tab1:CreateToggle({
+   Name = "🦘 กระโดดไม่จำกัด (Inf Jump)",
+   CurrentValue = false,
+   Callback = function(v)
+      _G.InfJump = v
+   end
+})
+
+Tab1:CreateToggle({
+   Name = "เดินทะลุกำแพง (Noclip)",
+   CurrentValue = false,
+   Callback = function(v)
+      _G.Noclip = v
+   end
+})
+
+Tab1:CreateToggle({
+   Name = "🛡️ ป้องกันมอนสเตอร์",
+   CurrentValue = false,
+   Callback = function(v)
+      _G.AntiMonster = v
+      task.spawn(function()
+         while _G.AntiMonster do
+            task.wait(0.3)
+            pcall(function()
+               local character = LocalPlayer.Character
+               if character and character:FindFirstChild("HumanoidRootPart") then
+                  for _, m in ipairs(Workspace:GetDescendants()) do
+                     if not _G.AntiMonster then break end
+                     if m:IsA("Model") and m ~= character and m:FindFirstChild("Humanoid") and not Players:GetPlayerFromCharacter(m) then
+                        local root = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
+                        if root and (character.HumanoidRootPart.Position - root.Position).Magnitude < 30 then
+                           root.CFrame = root.CFrame + Vector3.new(0, 1000, 0)
+                        end
+                     end
+                  end
+               end
+            end)
+         end
+      end)
+   end
+})
+
+-- TAB 2: ฟาร์ม & เรดาร์
+local Tab2 = Window:CreateTab("ฟาร์ม & เรดาร์", 4483362458)
+
+Tab2:CreateDropdown({
+   Name = "เลือกไอเทม",
+   Options = {"COPPER", "SILVER", "GOLD", "EMERALD", "RUBY", "DIAMOND", "CRYSTAL"},
+   CurrentOption = {"COPPER"},
+   Callback = function(o)
+      selectedItem = typeof(o) == "table" and o[1] or o
+   end
+})
+
+Tab2:CreateToggle({
+   Name = "📡 เปิดเรดาร์ตรวจจับของที่ไกลที่สุด",
+   CurrentValue = false,
+   Callback = function(v)
+      _G.RadarUI = v
+      RadarGui.Enabled = v
+   end
+})
+
+Tab2:CreateToggle({
+   Name = "🌈 เรืองแสงสีรุ้ง (RGB ESP)",
+   CurrentValue = false,
+   Callback = function(v)
+      _G.RGB_ESP = v
+      if not v then
+         for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name == "RGB_Highlight" then obj:Destroy() end
+         end
+      else
+         for _, item in ipairs(Workspace:GetDescendants()) do
+            if item.Name:upper():find(selectedItem) then
+               local mdl = item:IsA("Model") and item or item.Parent
+               if mdl and not mdl:FindFirstChild("RGB_Highlight") then
+                  local hl = Instance.new("Highlight", mdl)
+                  hl.Name = "RGB_Highlight"
+                  hl.FillTransparency = 0.2
+               end
+            end
+         end
+      end
+   end
+})
+
+Tab2:CreateButton({
+   Name = "⚡ วาร์ปไปจุดร้านค้า/รีไซเคิล",
+   Callback = function()
+      task.spawn(function()
+         local sellPart = getSellPart()
+         local character = LocalPlayer.Character
+         if sellPart and character and character:FindFirstChild("HumanoidRootPart") then
+            _G.Noclip = true
+            character.HumanoidRootPart.CFrame = sellPart.CFrame + Vector3.new(0, 3, 0)
+            task.wait(0.2)
+            _G.Noclip = false
+            Rayfield:Notify({Title = "สำเร็จ", Content = "วาร์ปมาที่จุดร้านค้าแล้ว", Duration = 2})
+         else
+            Rayfield:Notify({Title = "ไม่พบจุดขาย", Content = "หาจุดขาย/รีไซเคิลไม่พบในแมพ", Duration = 2})
+         end
+      end)
+   end
+})
+
+Tab2:CreateButton({
+   Name = "⚡ วาร์ปเก็บไอเทมที่ไกลที่สุดทันที",
+   Callback = function()
+      task.spawn(function()
+         local target = getFarthestTarget()
+         local character = LocalPlayer.Character
+         if target and character and character:FindFirstChild("HumanoidRootPart") then
+            _G.Noclip = true
+            character.HumanoidRootPart.CFrame = target.CFrame + Vector3.new(0, 2, 0)
+            task.wait(0.1)
+            local prompt = target:FindFirstChildWhichIsA("ProximityPrompt", true) or target.Parent:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt then fireproximityprompt(prompt) end
+            task.wait(0.1)
+            _G.Noclip = false
+            Rayfield:Notify({Title = "เก็บสำเร็จ!", Content = "เก็บ " .. selectedItem .. " เรียบร้อยแล้ว", Duration = 2})
+         else
+            Rayfield:Notify({Title = "ไม่พบไอเทม", Content = "ไม่พบไอเทมเป้าหมายในแมพ", Duration = 2})
+         end
+      end)
+   end
+})
+
+Tab2:CreateToggle({
+   Name = "🔄 ออโต้ฟาร์ม (เก็บของไกลสุด -> ขาย วนลูป)",
+   CurrentValue = false,
+   Callback = function(v)
+      _G.AutoFarm = v
+      task.spawn(function()
+         while _G.AutoFarm do
+            local target = getFarthestTarget()
+            local character = LocalPlayer.Character
+            if target and character and character:FindFirstChild("HumanoidRootPart") then
+               _G.Noclip = true
+               character.HumanoidRootPart.CFrame = target.CFrame + Vector3.new(0, 2, 0)
+               task.wait(0.1)
+               local prompt = target:FindFirstChildWhichIsA("ProximityPrompt", true) or target.Parent:FindFirstChildWhichIsA("ProximityPrompt", true)
+               if prompt then fireproximityprompt(prompt) end
+               task.wait(0.1)
+               sellItems()
+               Rayfield:Notify({Title = "ออโต้ฟาร์ม", Content = "เก็บและขาย " .. selectedItem .. " สำเร็จ!", Duration = 1.5})
+               task.wait(0.3)
+            else
+               _G.Noclip = false
+               task.wait(0.5)
+            end
+         end
+         _G.Noclip = false
+      end)
+   end
+})
+
+-- TAB 3: วิสัยทัศน์ & แมพ
+local Tab3 = Window:CreateTab("วิสัยทัศน์ & แมพ", 4483362458)
+
+Tab3:CreateToggle({
+   Name = "💡 แสงสว่างรอบตัว",
+   CurrentValue = false,
+   Callback = function(v)
+      local character = LocalPlayer.Character
+      if character and character:FindFirstChild("HumanoidRootPart") then
+         local light = character.HumanoidRootPart:FindFirstChild("Glow")
+         if v and not light then
+            light = Instance.new("PointLight", character.HumanoidRootPart)
+            light.Name = "Glow"
+            light.Range = 30
+            light.Brightness = 1.5
+            light.Color = Color3.fromRGB(255, 240, 200)
+         elseif not v and light then
+            light:Destroy()
+         end
+      end
+   end
+})
+
+Tab3:CreateToggle({
+   Name = "☀️ มองเห็นในที่มืด (Fullbright)",
+   CurrentValue = false,
+   Callback = function(v)
+      _G.Fullbright = v
+      Lighting.Ambient = v and Color3.new(1, 1, 1) or Color3.fromRGB(128, 128, 128)
+      Lighting.OutdoorAmbient = v and Color3.new(1, 1, 1) or Color3.fromRGB(128, 128, 128)
+   end
+})
+
+Tab3:CreateInput({
+   Name = "ชื่อวัตถุที่ต้องการลบ",
+   PlaceholderText = "เช่น Door, Wall",
+   Callback = function(txt)
+      deleteName = txt
+   end
+})
+
+Tab3:CreateButton({
+   Name = "🗑️ ลบวัตถุเป้าหมาย",
+   Callback = function()
+      if deleteName == "" then return end
+      for _, obj in ipairs(Workspace:GetDescendants()) do
+         if obj.Name:lower():find(deleteName:lower()) then
+            if obj:IsA("BasePart") then
+               obj.CanCollide = false
+               obj.Transparency = 0.9
+            elseif obj:IsA("Model") then
+               obj:Destroy()
+            end
+         end
+      end
+   end
+})
+
+-- TAB 4: แก้บัค & ตั้งค่า
+local Tab4 = Window:CreateTab("แก้บัค", 4483362458)
+
+Tab4:CreateButton({
+   Name = "🔧 รีเซ็ตตัวติดบัค / ตกแมพ",
+   Callback = function()
+      _G.AutoFarm = false
+      _G.Noclip = false
+      _G.SuperSprint = false
+      _G.InfJump = false
+      RadarGui.Enabled = false
+      local character = LocalPlayer.Character
+      if character then
+         for _, p in ipairs(character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = true end
+         end
+         if character:FindFirstChild("Humanoid") then
+            character.Humanoid.WalkSpeed = 16
+         end
+         if character:FindFirstChild("HumanoidRootPart") then
+            character.HumanoidRootPart.CFrame = character.HumanoidRootPart.CFrame + Vector3.new(0, 5, 0)
+         end
+      end
+   end
+})
+
+Tab4:CreateButton({
+   Name = "⛔ หยุดการทำงานทั้งหมด",
+   Callback = function()
+      _G.AutoFarm = false
+      _G.AntiMonster = false
+      _G.Noclip = false
+      _G.RGB_ESP = false
+      _G.RadarUI = false
+      _G.SuperSprint = false
+      _G.InfJump = false
+      RadarGui.Enabled = false
+      if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+         LocalPlayer.Character.Humanoid.WalkSpeed = 16
+      end
+   end
+})
+
+Rayfield:LoadConfiguration()
